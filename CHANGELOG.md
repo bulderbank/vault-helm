@@ -1,3 +1,41 @@
+## Unreleased
+
+Features:
+
+* Extra containers can now be added to the Vault pods
+
+## 0.2.1 (November 12th, 2019)
+
+Bugs:
+
+* Removed `readOnlyRootFilesystem` causing issues when validating deployments
+
+## 0.2.0 (October 29th, 2019)
+
+Features:
+
+* Added load balancer support
+* Added ingress support
+* Added configurable for service types (ClusterIP, NodePort, LoadBalancer, etc)
+* Removed root requirements, now runs as Vault user
+
+Improvements:
+
+* Added namespace value to all rendered objects
+* Made ports configurable in services
+* Added the ability to add custom annotations to services
+* Added docker image for running bats test in CircleCI
+* Removed restrictions around `dev` mode such as annotations
+* `readOnlyRootFilesystem` is now configurable
+* Image Pull Policy is now configurable
+
+Bugs:
+
+* Fixed selector bugs related to Helm label updates (services, affinities, and pod disruption)
+* Fixed bug where audit storage was not being mounted in HA mode
+* Fixed bug where Vault pod wasn't receiving SIGTERM signals
+
+
 ## 0.1.2 (August 22nd, 2019)
 
 Features:

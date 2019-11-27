@@ -50,6 +50,53 @@ load _helpers
   [ "${actual}" = "foo" ]
 }
 
+@test "server/standalone-StatefulSet: default imagePullPolicy" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml  \
+      --set 'global.image=foo' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.containers[0].imagePullPolicy' | tee /dev/stderr)
+  [ "${actual}" = "IfNotPresent" ]
+}
+
+@test "server/standalone-StatefulSet: Custom imagePullPolicy" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml  \
+      --set 'global.imagePullPolicy=foo' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.containers[0].imagePullPolicy' | tee /dev/stderr)
+  [ "${actual}" = "foo" ]
+}
+
+@test "server/standalone-StatefulSet: Custom imagePullSecrets" {
+  cd `chart_dir`
+  local object=$(helm template \
+      -x templates/server-statefulset.yaml  \
+      --set 'global.imagePullSecrets[0].name=foo' \
+      --set 'global.imagePullSecrets[1].name=bar' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.imagePullSecrets' | tee /dev/stderr)
+
+  local actual=$(echo $object |
+     yq -r '.[0].name' | tee /dev/stderr)
+  [ "${actual}" = "foo" ]
+
+  local actual=$(echo $object |
+      yq -r '.[1].name' | tee /dev/stderr)
+  [ "${actual}" = "bar" ]
+}
+
+@test "server/standalone-StatefulSet: default imagePullSecrets" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml  \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.imagePullSecrets' | tee /dev/stderr)
+  [ "${actual}" = "null" ]
+}
+
 #--------------------------------------------------------------------
 # updateStrategy
 
@@ -282,6 +329,15 @@ load _helpers
   [ "${actual}" = "/vault/userconfig/foo" ]
 }
 
+@test "server/standalone-StatefulSet: can mount audit" {
+  cd `chart_dir`
+  local object=$(helm template \
+      -x templates/server-statefulset.yaml  \
+      --set 'server.auditStorage.enabled=true' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.containers[0].volumeMounts[] | select(.name == "audit")' | tee /dev/stderr)
+}
+
 #--------------------------------------------------------------------
 # extraEnvironmentVars
 
@@ -296,19 +352,19 @@ load _helpers
       yq -r '.spec.template.spec.containers[0].env' | tee /dev/stderr)
 
   local actual=$(echo $object |
-     yq -r '.[5].name' | tee /dev/stderr)
+     yq -r '.[6].name' | tee /dev/stderr)
   [ "${actual}" = "FOO" ]
 
   local actual=$(echo $object |
-      yq -r '.[5].value' | tee /dev/stderr)
+      yq -r '.[6].value' | tee /dev/stderr)
   [ "${actual}" = "bar" ]
 
   local actual=$(echo $object |
-      yq -r '.[6].name' | tee /dev/stderr)
+      yq -r '.[7].name' | tee /dev/stderr)
   [ "${actual}" = "FOOBAR" ]
 
   local actual=$(echo $object |
-      yq -r '.[6].value' | tee /dev/stderr)
+      yq -r '.[7].value' | tee /dev/stderr)
   [ "${actual}" = "foobar" ]
 
   local object=$(helm template \
@@ -319,19 +375,19 @@ load _helpers
       yq -r '.spec.template.spec.containers[0].env' | tee /dev/stderr)
 
   local actual=$(echo $object |
-     yq -r '.[5].name' | tee /dev/stderr)
+     yq -r '.[6].name' | tee /dev/stderr)
   [ "${actual}" = "FOO" ]
 
   local actual=$(echo $object |
-      yq -r '.[5].value' | tee /dev/stderr)
+      yq -r '.[6].value' | tee /dev/stderr)
   [ "${actual}" = "bar" ]
 
   local actual=$(echo $object |
-      yq -r '.[6].name' | tee /dev/stderr)
+      yq -r '.[7].name' | tee /dev/stderr)
   [ "${actual}" = "FOOBAR" ]
 
   local actual=$(echo $object |
-      yq -r '.[6].value' | tee /dev/stderr)
+      yq -r '.[7].value' | tee /dev/stderr)
   [ "${actual}" = "foobar" ]
 }
 
@@ -509,4 +565,158 @@ load _helpers
       . | tee /dev/stderr |
       yq -r '.spec.template.spec.nodeSelector' | tee /dev/stderr)
   [ "${actual}" = "testing" ]
+}
+
+#--------------------------------------------------------------------
+# extraContainers
+
+@test "server/standalone-StatefulSet: adds extra containers" {
+  cd `chart_dir`
+
+  # Test that it defines it
+  local object=$(helm template \
+      -x templates/server-statefulset.yaml  \
+      --set 'server.extraContainers[0].image=test-image' \
+      --set 'server.extraContainers[0].name=test-container' \
+      --set 'server.extraContainers[0].ports[0].name=test-port' \
+      --set 'server.extraContainers[0].ports[0].containerPort=9410' \
+      --set 'server.extraContainers[0].ports[0].protocol=TCP' \
+      --set 'server.extraContainers[0].env[0].name=TEST_ENV' \
+      --set 'server.extraContainers[0].env[0].value=test_env_value' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.containers[] | select(.name == "test-container")' | tee /dev/stderr)
+
+  local actual=$(echo $object |
+      yq -r '.name' | tee /dev/stderr)
+  [ "${actual}" = "test-container" ]
+
+  local actual=$(echo $object |
+      yq -r '.image' | tee /dev/stderr)
+  [ "${actual}" = "test-image" ]
+
+  local actual=$(echo $object |
+      yq -r '.ports[0].name' | tee /dev/stderr)
+  [ "${actual}" = "test-port" ]
+
+  local actual=$(echo $object |
+      yq -r '.ports[0].containerPort' | tee /dev/stderr)
+  [ "${actual}" = "9410" ]
+
+  local actual=$(echo $object |
+      yq -r '.ports[0].protocol' | tee /dev/stderr)
+  [ "${actual}" = "TCP" ]
+
+  local actual=$(echo $object |
+      yq -r '.env[0].name' | tee /dev/stderr)
+  [ "${actual}" = "TEST_ENV" ]
+
+  local actual=$(echo $object |
+      yq -r '.env[0].value' | tee /dev/stderr)
+  [ "${actual}" = "test_env_value" ]
+
+}
+
+@test "server/standalone-StatefulSet: add two extra containers" {
+  cd `chart_dir`
+
+  # Test that it defines it
+  local object=$(helm template \
+      -x templates/server-statefulset.yaml  \
+      --set 'server.extraContainers[0].image=test-image' \
+      --set 'server.extraContainers[0].name=test-container' \
+      --set 'server.extraContainers[1].image=test-image' \
+      --set 'server.extraContainers[1].name=test-container-2' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.containers' | tee /dev/stderr)
+
+  local containers_count=$(echo $object |
+      yq -r 'length' | tee /dev/stderr)
+  [ "${containers_count}" = 3 ]
+
+}
+
+@test "server/standalone-StatefulSet: no extra containers added" {
+  cd `chart_dir`
+
+  # Test that it defines it
+  local object=$(helm template \
+      -x templates/server-statefulset.yaml  \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.containers' | tee /dev/stderr)
+
+  local containers_count=$(echo $object |
+      yq -r 'length' | tee /dev/stderr)
+  [ "${containers_count}" = 1 ]  
+}
+
+# extra labels
+
+@test "server/standalone-StatefulSet: specify extraLabels" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      --set 'server.extraLabels.foo=bar' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.metadata.labels.foo' | tee /dev/stderr)
+  [ "${actual}" = "bar" ]
+}
+
+
+#--------------------------------------------------------------------
+# Security Contexts
+@test "server/standalone-StatefulSet: uid default" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.securityContext.runAsUser' | tee /dev/stderr)
+  [ "${actual}" = "100" ]
+}
+
+@test "server/standalone-StatefulSet: uid configurable" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      --set 'server.uid=2000' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.securityContext.runAsUser' | tee /dev/stderr)
+  [ "${actual}" = "2000" ]
+}
+
+@test "server/standalone-StatefulSet: gid default" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.securityContext.runAsGroup' | tee /dev/stderr)
+  [ "${actual}" = "1000" ]
+}
+
+@test "server/standalone-StatefulSet: gid configurable" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      --set 'server.gid=2000' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.securityContext.runAsGroup' | tee /dev/stderr)
+  [ "${actual}" = "2000" ]
+}
+
+@test "server/standalone-StatefulSet: fsgroup default" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.securityContext.fsGroup' | tee /dev/stderr)
+  [ "${actual}" = "1000" ]
+}
+
+@test "server/standalone-StatefulSet: fsgroup configurable" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      --set 'server.gid=2000' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.securityContext.fsGroup' | tee /dev/stderr)
+  [ "${actual}" = "2000" ]
 }
